@@ -1,0 +1,243 @@
+---
+title: "Course project: predict type of movement on Weight Lifting Exercises dataset"
+author: "TizVic"
+date: "May 17, 2017"
+output: 
+        html_document:
+                number_sections: true
+                keep_md: true
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Executive summary
+In this document I analyze the **Weight Lifting Exercises dataset** (see <http://groupware.les.inf.puc-rio.br/har>) to investigate how an activity was performed by six young man. They were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: class A corresponds to the specified execution of the exercise, while the other 4 classes (B - E) correspond to common mistakes. 
+
+To determine which class (A-E) correspond to the sensor signals I use a Random Forest classification algorithm after selecting it between different algorithms by means of Accuracy analysis. The algorithm has an in-sample error of 0.17% and an expected out-of-sample error of 0.28%  in the classification of the movements. Finally, I use the algorithm to predict the result on a test set unlabeled and results are compatible with expected out-of-sample error.
+
+# Data processing
+## Download datasets
+The datasets were downloaded from the [address](https://www.coursera.org/learn/practical-machine-learning/peer/R43St/prediction-assignment-writeup) indicated in the assignment and loaded in memory using the following code:
+```{r libraries,message=FALSE, warning=FALSE}
+## Load libraries
+require(caret)
+require(e1071)
+require(gbm)
+require(randomForest)
+require(kernlab)
+```
+```{r download,message=FALSE, warning=FALSE,cache=TRUE}
+## Download TRAINING SET
+if (!file.exists("./data/pml-training.csv")) {
+        if (!dir.exists("./data")) {
+                dir.create("./data")
+        }
+        download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+                      "./data/pml-training.csv")
+}
+## Download TESTING SET
+if (!file.exists("./data/pml-testing.csv")) {
+        if (!dir.exists("./data")) {
+                dir.create("./data")
+        }
+        download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+                      "./data/pml-testing.csv")
+}
+
+## Load data
+training <- read.csv("./data/pml-training.csv",
+                     stringsAsFactors = F, 
+                     header = T,
+                     na.strings = c("NA","","#DIV/0"))
+qzTesting <- read.csv("./data/pml-testing.csv",
+                    stringsAsFactors = F,
+                    header = T)
+
+```
+
+## Data preparation
+First I analyzed how the data is structured and whether there are NAs
+```{r preliminaryDataAnalysis}
+str(training[,1:15])
+# how many NAs per column?
+list <- apply(training, 2, function (x) {sum(is.na(x))})/nrow(training)
+sprintf("Number of column with less then 50 perc of significative data: %i", sum(list > .5))
+```
+There are many columns with more NAs than data so I remove these column; in addition the first six column relate to data not interesting for analysis like name of subject, date and time of event so I remove these also:  
+```{r removeColumn}
+# remove column with too many NAs (more than 50% NAs) and first 6 column useless
+col2Remove <- which(list > .5, useNames = F)
+train2 <- training[,-c(1:6,col2Remove)]
+qzTest <- qzTesting[,-c(1:6,col2Remove)]
+```
+
+Last check for columns with near zero variance predictors:
+```{r nzvColumn, message=FALSE, warning=FALSE, cache=TRUE}
+# remove near zero column
+col2Remove <- nearZeroVar(train2)
+sprintf("Column with near zero variance predictors: %i", length(col2Remove))
+```
+and final data preparation
+```{r finalPreparation}
+# Final preparation
+train1 <- train2
+train1$classe <- as.factor(train1$classe)
+str(train1)
+```
+
+## Data splitting
+Now that the dataset is ready to use I divide it in three subsets: training set, cross validation set and test set. I chose this subdivision because the source dataset is quite large and this allows me to have a set for training (`ltTR`), where the various algorithms are trained, one set to check the performances (`ltCV`), unrelated to the first one, and finally a set (`ltTS`), completely independent of the two previous ones, on which to test the expected out-of-sample errors.
+```{r subsetting}
+## for reproducibility
+set.seed(234)
+
+# creation TRAIN/CV/TEST sets (60/20/20)
+inTrain <- createDataPartition(train1$classe, p=.6, list = F)
+inCV <- createDataPartition(train1[-inTrain,]$classe, p=.5, list = F)
+ltTR <- train1[inTrain,]
+ltCV <- train1[-inTrain,][inCV,]
+ltTS <- train1[-inTrain,][-inCV,]
+sprintf("Size TRAIN SET: %i, CV SET: %i, TEST SET: %i",
+        dim(ltTR)[1],
+        dim(ltCV)[1],
+        dim(ltTS)[1])
+```
+
+# Model selection
+## Introduction
+Let's start by analyzing the data using different classification algorithms starting from the simpler ones and proceeding to the more complex ones.
+All these algorithms are trained on the train set (`ltTR`) while accuracy is calculated on the cv set (`ltCV`). For each of the algorithms, the processing time is calculated so that it can also be estimated the cost in cpu time.
+
+## Linear discriminant analysis
+See <https://en.wikipedia.org/wiki/Linear_discriminant_analysis> for reference:
+```{r lda, message=FALSE, warning=FALSE, cache=TRUE}
+# LDA
+ltTRlda <- ltTR
+ltCVlda <- ltCV
+# Train on ltTR set
+ldaTime <- system.time(modFitLDA <- train(classe ~ ., 
+                                          method = "lda", 
+                                          preProc = c("center", "scale"),
+                                          data = ltTRlda))
+# prediction and accuracy on ltCV set
+resLDA <- predict(modFitLDA, ltCVlda)
+accLDA <- confusionMatrix(resLDA, ltCVlda$classe)$overall['Accuracy']
+dfTime <- data.frame(algorithm="LDA",
+                     accuracy=accLDA,
+                     processTime=ldaTime[3], stringsAsFactors = F)
+sprintf("LDA accuracy: %.3f, process time (total s): %.2f",
+        accLDA,
+        ldaTime[3])
+```
+## Support Vector Machines algorithm (SVMs)
+For the SVMs algorithm I used two type of kernel: linear and radial (see <https://en.wikipedia.org/wiki/Support_vector_machine> for reference):
+### Linear kernel SVM
+```{r linearSVM, cache=TRUE, message=FALSE, warning=FALSE}
+## SVM Linear Kernel
+ltTRsvm <- ltTR
+ltCVsvm <- ltCV
+linTime <- system.time(
+                        modFitSVML <- train(classe ~ ., 
+                                           method = "svmLinear", 
+                                           preProc = c("center","scale"),
+                                           data = ltTRsvm)
+                )
+resSVML <- predict(modFitSVML, ltCVsvm)
+accSVML <- confusionMatrix(resSVML, 
+                          ltCVsvm$classe)$overall['Accuracy']
+dfTime <- rbind(dfTime, list("Linear kernel SVM", accSVML, linTime[3]))
+sprintf("SVM Linear kernel accuracy: %f,  process time (total s): %f",
+        accSVML,
+        linTime[3])
+```
+
+### Radial kernel SVM
+```{r radialSVM, cache=TRUE, message=FALSE, warning=FALSE}
+## SVM Radial Kernel
+radTime <- system.time(modFitSVMR <- train(classe ~ ., 
+                                           method = "svmRadial", 
+                                           preProc = c("center","scale"),
+                                           data = ltTRsvm))
+resSVMR <- predict(modFitSVMR, ltCVsvm)
+accSVMR <- confusionMatrix(resSVMR, 
+                          ltCVsvm$classe)$overall['Accuracy']
+dfTime <- rbind(dfTime, list("Radial kernel SVM", accSVMR, radTime[3]))
+sprintf("SVM Radial kernel accuracy: %f,  process time (total s): %f",
+        accSVMR,
+        radTime[3])
+```
+
+### SVM considerations
+Radial kernel it is better but at much higher cost of CPU time.
+
+## Generalized Boosted Regression Modeling
+For boosting see <https://en.wikipedia.org/wiki/Boosting_(machine_learning)>.
+```{r boost, cache=TRUE, message=FALSE, warning=FALSE}
+## Boosting with trees
+ltTRgbm <- ltTR
+ltCVgbm <- ltCV
+gbmTime <- system.time(
+        modFitGBM <- train(classe ~ ., 
+                           method = "gbm", 
+                           preProc = c("center","scale"),
+                           train.fraction = .99,
+                           verbose = F,
+                           data = ltTRgbm)
+)
+resGBM <- predict(modFitGBM, ltCVgbm)
+accGBM <- confusionMatrix(resGBM, 
+                           ltCVgbm$classe)$overall['Accuracy']
+dfTime <- rbind(dfTime, list("GBM", accGBM, gbmTime[3]))
+sprintf("GBM accuracy: %f, process time (total s): %f",
+        accGBM,
+        gbmTime[3])
+
+```
+
+## Random forest
+For reference see <https://en.wikipedia.org/wiki/Random_forest>.
+```{r randomForest, cache=TRUE, message=FALSE, warning=FALSE}
+## Random Forest
+ltTRrf <- ltTR
+ltCVrf <- ltCV
+rfTime <- system.time(modFitRF <- randomForest(classe ~ ., 
+                                               method = "rf", 
+                                               data = ltTRrf))
+resRF <- predict(modFitRF, ltCVrf)
+accRF <- confusionMatrix(resRF, 
+                         ltCVrf$classe)$overall['Accuracy']
+dfTime <- rbind(dfTime, list("RandomForest", accRF, rfTime[3]))
+sprintf("RF accuracy: %f, process time (total s): %f",
+        accRF,
+        rfTime[3])
+```
+## Final selection
+Summarizing the results seen in the previous subsections in the following table:
+```{r timeTable, echo=F}
+knitr::kable(dfTime, row.names = F) 
+```
+The two best algorithms on cross validation test are GBM and Random Forest with very similar performance but very different processing times so I choose Random Forest as the final model.
+
+
+# Error evaluation
+To estimate out-of-sample errors of the final model I can not use the cross validation set because I used it for choosing the algorithm and therefore there are risk overfitting.
+The evaluation of accuracy on the test set `ltTS`, that is completely independent of the previous ones, is:
+```{r errorOutOfSample}
+predErr <- predict(modFitRF, ltTS)
+confusionMatrix(predErr, ltTS$classe)
+
+```
+The accuracy of the model `r confusionMatrix(predErr, ltTS$classe)$overall['Accuracy']` on the test set is lower then the accuracy on cv set `r accRF` as expected, but is however very high and this could be a synthom of overfitting. In a dataset with *different subjects*, which will have different ways to perform the various types of exercises, we can expect a lower accuracy.
+
+I applied the model to the testing dataset provided and the responses were:
+```{r responsesQuiz}
+# predict for final quiz 
+resQZ <- predict(modFitRF, qzTest)
+print(resQZ)
+```
+These responses inputted in the final quiz have given a score of 20/20, compatible with expected accuracy, taking into account the small number of data in the dataset where each answer counts for 1/20 of the final result.
+
+
