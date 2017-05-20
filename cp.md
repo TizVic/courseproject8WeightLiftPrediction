@@ -330,13 +330,14 @@ sprintf("RF accuracy: %f, process time (total s): %f",
 ## Final selection
 Summarizing the results seen in the previous subsections in the following table:
 
-algorithm             accuracy   processTime
-------------------  ----------  ------------
-LDA                  0.7106806         13.94
-Linear kernel SVM    0.7899567        288.19
-Radial kernel SVM    0.9250574       2343.78
-GBM                  0.9788427       1151.48
-RandomForest         0.9982157         29.63
+algorithm         |    accuracy |  processTime
+------------------|  ---------- | ------------
+LDA               |   0.7106806 |        13.94
+Linear kernel SVM |   0.7899567 |       288.19
+Radial kernel SVM |   0.9250574 |      2343.78
+GBM               |   0.9788427 |      1151.48
+RandomForest      |   0.9982157 |        29.63
+
 The two best algorithms on cross validation test are GBM and Random Forest with very similar performance but very different processing times so I choose Random Forest as the final model.
 
 
