@@ -7,7 +7,7 @@ May 17, 2017
 # Executive summary
 In this document I analyze the **Weight Lifting Exercises dataset** (see <http://groupware.les.inf.puc-rio.br/har>) to investigate how an activity was performed by six young man. They were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: class A corresponds to the specified execution of the exercise, while the other 4 classes (B - E) correspond to common mistakes. 
 
-To determine which class (A-E) correspond to the sensor signals I use a Random Forest classification algorithm after selecting it between different algorithms by means of Accuracy analysis. The algorithm has an in-sample error of 0.17% and an expected out-of-sample error of 0.28%  in the classification of the movements. Finally, I use the algorithm to predict the result on a test set unlabeled and results are compatible with expected out-of-sample error.
+To determine which class (A-E) correspond to the sensor signals I use a Random Forest classification algorithm after selecting it between different algorithms by means of Accuracy analysis. The algorithm has an in-sample error of 0.18% and an expected out-of-sample error of 0.28%  in the classification of the movements. Finally, I use the algorithm to predict the result on a test set unlabeled and results are compatible with expected out-of-sample error.
 
 # Data processing
 ## Download datasets
@@ -85,6 +85,7 @@ sprintf("Number of column with less then 50 perc of significative data: %i", sum
 ```
 ## [1] "Number of column with less then 50 perc of significative data: 100"
 ```
+
 There are many columns with more NAs than data so I remove these column; in addition the first six column relate to data not interesting for analysis like name of subject, date and time of event so I remove these also:  
 
 ```r
@@ -218,13 +219,13 @@ accLDA <- confusionMatrix(resLDA, ltCVlda$classe)$overall['Accuracy']
 dfTime <- data.frame(algorithm="LDA",
                      accuracy=accLDA,
                      processTime=ldaTime[3], stringsAsFactors = F)
-sprintf("LDA accuracy: %.3f, process time (total s): %.2f",
+sprintf("LDA accuracy: %.4f, process time (total s): %.2f",
         accLDA,
         ldaTime[3])
 ```
 
 ```
-## [1] "LDA accuracy: 0.711, process time (total s): 13.62"
+## [1] "LDA accuracy: 0.7107, process time (total s): 13.48"
 ```
 ## Support Vector Machines algorithm (SVMs)
 For the SVMs algorithm I used two type of kernel: linear and radial (see <https://en.wikipedia.org/wiki/Support_vector_machine> for reference):
@@ -244,13 +245,13 @@ resSVML <- predict(modFitSVML, ltCVsvm)
 accSVML <- confusionMatrix(resSVML, 
                           ltCVsvm$classe)$overall['Accuracy']
 dfTime <- rbind(dfTime, list("Linear kernel SVM", accSVML, linTime[3]))
-sprintf("SVM Linear kernel accuracy: %f,  process time (total s): %f",
+sprintf("SVM Linear kernel accuracy: %.4f,  process time (total s): %.2f",
         accSVML,
         linTime[3])
 ```
 
 ```
-## [1] "SVM Linear kernel accuracy: 0.789957,  process time (total s): 288.190000"
+## [1] "SVM Linear kernel accuracy: 0.7900,  process time (total s): 288.79"
 ```
 
 ### Radial kernel SVM
@@ -265,13 +266,13 @@ resSVMR <- predict(modFitSVMR, ltCVsvm)
 accSVMR <- confusionMatrix(resSVMR, 
                           ltCVsvm$classe)$overall['Accuracy']
 dfTime <- rbind(dfTime, list("Radial kernel SVM", accSVMR, radTime[3]))
-sprintf("SVM Radial kernel accuracy: %f,  process time (total s): %f",
+sprintf("SVM Radial kernel accuracy: %.4f,  process time (total s): %.2f",
         accSVMR,
         radTime[3])
 ```
 
 ```
-## [1] "SVM Radial kernel accuracy: 0.925057,  process time (total s): 2343.780000"
+## [1] "SVM Radial kernel accuracy: 0.9251,  process time (total s): 2353.86"
 ```
 
 ### SVM considerations
@@ -288,7 +289,7 @@ gbmTime <- system.time(
         modFitGBM <- train(classe ~ ., 
                            method = "gbm", 
                            preProc = c("center","scale"),
-                           train.fraction = .99,
+                           train.fraction = .99, # due to internal bug in my installation
                            verbose = F,
                            data = ltTRgbm)
 )
@@ -296,13 +297,13 @@ resGBM <- predict(modFitGBM, ltCVgbm)
 accGBM <- confusionMatrix(resGBM, 
                            ltCVgbm$classe)$overall['Accuracy']
 dfTime <- rbind(dfTime, list("GBM", accGBM, gbmTime[3]))
-sprintf("GBM accuracy: %f, process time (total s): %f",
+sprintf("GBM accuracy: %.4f, process time (total s): %.2f",
         accGBM,
         gbmTime[3])
 ```
 
 ```
-## [1] "GBM accuracy: 0.978843, process time (total s): 1151.480000"
+## [1] "GBM accuracy: 0.9788, process time (total s): 1136.05"
 ```
 
 ## Random forest
@@ -319,24 +320,24 @@ resRF <- predict(modFitRF, ltCVrf)
 accRF <- confusionMatrix(resRF, 
                          ltCVrf$classe)$overall['Accuracy']
 dfTime <- rbind(dfTime, list("RandomForest", accRF, rfTime[3]))
-sprintf("RF accuracy: %f, process time (total s): %f",
+sprintf("RF accuracy: %.4f, process time (total s): %.2f",
         accRF,
         rfTime[3])
 ```
 
 ```
-## [1] "RF accuracy: 0.998216, process time (total s): 29.630000"
+## [1] "RF accuracy: 0.9982, process time (total s): 25.87"
 ```
 ## Final selection
 Summarizing the results seen in the previous subsections in the following table:
 
-algorithm         |    accuracy |  processTime
-------------------|  ---------- | ------------
-LDA               |   0.7106806 |        13.94
-Linear kernel SVM |   0.7899567 |       288.19
-Radial kernel SVM |   0.9250574 |      2343.78
-GBM               |   0.9788427 |      1151.48
-RandomForest      |   0.9982157 |        29.63
+  algorithm       |  accuracy  | processTime 
+------------------|-----------:|-----------:
+LDA               |  0.7106806 |        13.48
+Linear kernel SVM |  0.7899567 |        288.79
+Radial kernel SVM |  0.9250574 |        2353.86
+GBM               |  0.9788427 |        1136.05
+RandomForest      |  0.9982157 |        25.87
 
 The two best algorithms on cross validation test are GBM and Random Forest with very similar performance but very different processing times so I choose Random Forest as the final model.
 
@@ -383,6 +384,7 @@ confusionMatrix(predErr, ltTS$classe)
 ## Detection Prevalence   0.2847   0.1932   0.1751   0.1639   0.1830
 ## Balanced Accuracy      0.9998   0.9977   0.9978   0.9972   0.9979
 ```
+
 The accuracy of the model 0.997196 on the test set is lower then the accuracy on cv set 0.9982157 as expected, but is however very high and this could be a synthom of overfitting. In a dataset with *different subjects*, which will have different ways to perform the various types of exercises, we can expect a lower accuracy.
 
 I applied the model to the testing dataset provided and the responses were:
@@ -398,6 +400,7 @@ print(resQZ)
 ##  B  A  B  A  A  E  D  B  A  A  B  C  B  A  E  E  A  B  B  B 
 ## Levels: A B C D E
 ```
+
 These responses inputted in the final quiz have given a score of 20/20, compatible with expected accuracy, taking into account the small number of data in the dataset where each answer counts for 1/20 of the final result.
 
 

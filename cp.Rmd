@@ -16,7 +16,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # Executive summary
 In this document I analyze the **Weight Lifting Exercises dataset** (see <http://groupware.les.inf.puc-rio.br/har>) to investigate how an activity was performed by six young man. They were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: class A corresponds to the specified execution of the exercise, while the other 4 classes (B - E) correspond to common mistakes. 
 
-To determine which class (A-E) correspond to the sensor signals I use a Random Forest classification algorithm after selecting it between different algorithms by means of Accuracy analysis. The algorithm has an in-sample error of 0.17% and an expected out-of-sample error of 0.28%  in the classification of the movements. Finally, I use the algorithm to predict the result on a test set unlabeled and results are compatible with expected out-of-sample error.
+To determine which class (A-E) correspond to the sensor signals I use a Random Forest classification algorithm after selecting it between different algorithms by means of Accuracy analysis. The algorithm has an in-sample error of 0.18% and an expected out-of-sample error of 0.28%  in the classification of the movements. Finally, I use the algorithm to predict the result on a test set unlabeled and results are compatible with expected out-of-sample error.
 
 # Data processing
 ## Download datasets
@@ -66,6 +66,7 @@ str(training[,1:15])
 list <- apply(training, 2, function (x) {sum(is.na(x))})/nrow(training)
 sprintf("Number of column with less then 50 perc of significative data: %i", sum(list > .5))
 ```
+
 There are many columns with more NAs than data so I remove these column; in addition the first six column relate to data not interesting for analysis like name of subject, date and time of event so I remove these also:  
 ```{r removeColumn}
 # remove column with too many NAs (more than 50% NAs) and first 6 column useless
@@ -113,7 +114,7 @@ All these algorithms are trained on the train set (`ltTR`) while accuracy is cal
 
 ## Linear discriminant analysis
 See <https://en.wikipedia.org/wiki/Linear_discriminant_analysis> for reference:
-```{r lda, message=FALSE, warning=FALSE, cache=TRUE}
+```{r lda, message=FALSE, warning=FALSE, cache=F}
 # LDA
 ltTRlda <- ltTR
 ltCVlda <- ltCV
@@ -128,14 +129,14 @@ accLDA <- confusionMatrix(resLDA, ltCVlda$classe)$overall['Accuracy']
 dfTime <- data.frame(algorithm="LDA",
                      accuracy=accLDA,
                      processTime=ldaTime[3], stringsAsFactors = F)
-sprintf("LDA accuracy: %.3f, process time (total s): %.2f",
+sprintf("LDA accuracy: %.4f, process time (total s): %.2f",
         accLDA,
         ldaTime[3])
 ```
 ## Support Vector Machines algorithm (SVMs)
 For the SVMs algorithm I used two type of kernel: linear and radial (see <https://en.wikipedia.org/wiki/Support_vector_machine> for reference):
 ### Linear kernel SVM
-```{r linearSVM, cache=TRUE, message=FALSE, warning=FALSE}
+```{r linearSVM, cache=F, message=FALSE, warning=FALSE}
 ## SVM Linear Kernel
 ltTRsvm <- ltTR
 ltCVsvm <- ltCV
@@ -149,13 +150,13 @@ resSVML <- predict(modFitSVML, ltCVsvm)
 accSVML <- confusionMatrix(resSVML, 
                           ltCVsvm$classe)$overall['Accuracy']
 dfTime <- rbind(dfTime, list("Linear kernel SVM", accSVML, linTime[3]))
-sprintf("SVM Linear kernel accuracy: %f,  process time (total s): %f",
+sprintf("SVM Linear kernel accuracy: %.4f,  process time (total s): %.2f",
         accSVML,
         linTime[3])
 ```
 
 ### Radial kernel SVM
-```{r radialSVM, cache=TRUE, message=FALSE, warning=FALSE}
+```{r radialSVM, cache=F, message=FALSE, warning=FALSE}
 ## SVM Radial Kernel
 radTime <- system.time(modFitSVMR <- train(classe ~ ., 
                                            method = "svmRadial", 
@@ -165,7 +166,7 @@ resSVMR <- predict(modFitSVMR, ltCVsvm)
 accSVMR <- confusionMatrix(resSVMR, 
                           ltCVsvm$classe)$overall['Accuracy']
 dfTime <- rbind(dfTime, list("Radial kernel SVM", accSVMR, radTime[3]))
-sprintf("SVM Radial kernel accuracy: %f,  process time (total s): %f",
+sprintf("SVM Radial kernel accuracy: %.4f,  process time (total s): %.2f",
         accSVMR,
         radTime[3])
 ```
@@ -175,7 +176,7 @@ Radial kernel it is better but at much higher cost of CPU time.
 
 ## Generalized Boosted Regression Modeling
 For boosting see <https://en.wikipedia.org/wiki/Boosting_(machine_learning)>.
-```{r boost, cache=TRUE, message=FALSE, warning=FALSE}
+```{r boost, cache=F, message=FALSE, warning=FALSE}
 ## Boosting with trees
 ltTRgbm <- ltTR
 ltCVgbm <- ltCV
@@ -183,7 +184,7 @@ gbmTime <- system.time(
         modFitGBM <- train(classe ~ ., 
                            method = "gbm", 
                            preProc = c("center","scale"),
-                           train.fraction = .99,
+                           train.fraction = .99, # due to internal bug in my installation
                            verbose = F,
                            data = ltTRgbm)
 )
@@ -191,7 +192,7 @@ resGBM <- predict(modFitGBM, ltCVgbm)
 accGBM <- confusionMatrix(resGBM, 
                            ltCVgbm$classe)$overall['Accuracy']
 dfTime <- rbind(dfTime, list("GBM", accGBM, gbmTime[3]))
-sprintf("GBM accuracy: %f, process time (total s): %f",
+sprintf("GBM accuracy: %.4f, process time (total s): %.2f",
         accGBM,
         gbmTime[3])
 
@@ -199,7 +200,7 @@ sprintf("GBM accuracy: %f, process time (total s): %f",
 
 ## Random forest
 For reference see <https://en.wikipedia.org/wiki/Random_forest>.
-```{r randomForest, cache=TRUE, message=FALSE, warning=FALSE}
+```{r randomForest, cache=F, message=FALSE, warning=FALSE}
 ## Random Forest
 ltTRrf <- ltTR
 ltCVrf <- ltCV
@@ -210,7 +211,7 @@ resRF <- predict(modFitRF, ltCVrf)
 accRF <- confusionMatrix(resRF, 
                          ltCVrf$classe)$overall['Accuracy']
 dfTime <- rbind(dfTime, list("RandomForest", accRF, rfTime[3]))
-sprintf("RF accuracy: %f, process time (total s): %f",
+sprintf("RF accuracy: %.4f, process time (total s): %.2f",
         accRF,
         rfTime[3])
 ```
@@ -219,6 +220,7 @@ Summarizing the results seen in the previous subsections in the following table:
 ```{r timeTable, echo=F}
 knitr::kable(dfTime, row.names = F) 
 ```
+
 The two best algorithms on cross validation test are GBM and Random Forest with very similar performance but very different processing times so I choose Random Forest as the final model.
 
 
@@ -230,6 +232,7 @@ predErr <- predict(modFitRF, ltTS)
 confusionMatrix(predErr, ltTS$classe)
 
 ```
+
 The accuracy of the model `r confusionMatrix(predErr, ltTS$classe)$overall['Accuracy']` on the test set is lower then the accuracy on cv set `r accRF` as expected, but is however very high and this could be a synthom of overfitting. In a dataset with *different subjects*, which will have different ways to perform the various types of exercises, we can expect a lower accuracy.
 
 I applied the model to the testing dataset provided and the responses were:
@@ -238,6 +241,7 @@ I applied the model to the testing dataset provided and the responses were:
 resQZ <- predict(modFitRF, qzTest)
 print(resQZ)
 ```
+
 These responses inputted in the final quiz have given a score of 20/20, compatible with expected accuracy, taking into account the small number of data in the dataset where each answer counts for 1/20 of the final result.
 
 
